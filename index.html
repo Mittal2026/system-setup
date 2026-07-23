@@ -16,7 +16,6 @@
     --success: #3FB950; --success-dim: rgba(63,185,80,0.12);
     --danger: #F85149; --danger-dim: rgba(248,81,73,0.12);
     --warning: #D29922; --warning-dim: rgba(210,153,34,0.12);
-    --purple: #A371F7; --purple-dim: rgba(163,113,247,0.12);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
@@ -28,8 +27,6 @@
   
   .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.2s ease; text-decoration: none; }
   .btn:active { transform: scale(0.97); }
-  .btn-primary { background: var(--accent); color: #0D1117; }
-  .btn-primary:hover { background: #E0B84E; }
   .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
   .btn-danger:hover { background: var(--danger); color: white; }
   .btn-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(63,185,80,0.3); }
@@ -53,6 +50,11 @@
   .bg-glow { position: fixed; border-radius: 50%; pointer-events: none; filter: blur(120px); opacity: 0.04; z-index: 0; }
   .save-indicator { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); padding: 4px 10px; border-radius: 6px; background: var(--surface-elevated); border: 1px solid var(--border); }
   .save-indicator.synced { color: var(--success); }
+
+  .req-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+  .req-item.required { color: var(--warning); font-weight: 600; }
+  .req-item.required-revoke { color: var(--danger); font-weight: 600; }
+  .req-item.not-required { color: var(--text-muted); opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -71,7 +73,7 @@
       </div>
       <div>
         <h1 style="font-size:20px;font-weight:700;">System Setup Management</h1>
-        <p style="font-size:12px;color:var(--text-muted);">Portal & Biometric Integration Queue</p>
+        <p style="font-size:12px;color:var(--text-muted);">Portal, Email & Biometric Integration</p>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
@@ -87,7 +89,7 @@
     <div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
         <span class="pulse-dot green"></span>
-        <h2 style="font-size:16px;font-weight:700;">Pending Active Setup</h2>
+        <h2 style="font-size:16px;font-weight:700;">Pending Setup</h2>
         <span id="activeCount" style="background:var(--success-dim);color:var(--success);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">0</span>
       </div>
       <div id="activeQueue" style="display:flex;flex-direction:column;gap:14px;">
@@ -99,7 +101,7 @@
     <div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
         <span class="pulse-dot red"></span>
-        <h2 style="font-size:16px;font-weight:700;">Pending Inactive Revocation</h2>
+        <h2 style="font-size:16px;font-weight:700;">Pending Revocation</h2>
         <span id="inactiveCount" style="background:var(--danger-dim);color:var(--danger);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">0</span>
       </div>
       <div id="inactiveQueue" style="display:flex;flex-direction:column;gap:14px;">
@@ -111,41 +113,18 @@
 </div>
 
 <script>
-  // ==========================================
-  // CONFIGURATION
-  // ==========================================
-  // PASTE YOUR SYSTEM SETUP WEB APP URL HERE
   const API_URL = 'https://script.google.com/macros/s/AKfycbxBIX5mNpekFmaufGs9mrdhyKx3OVqL68nQw_EPDbyGaaBcuwRjq-P9EHjeaj3S9qe3/exec';
   const TOKEN = 'SetupAdmin2024';
-  const POLL_INTERVAL = 15000; // Auto-refresh every 15 seconds
+  const POLL_INTERVAL = 15000;
 
-  // FORM URL TEMPLATES (Provided by you)
   const SETUP_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeLkZw2FB5M_ml6izw79B8wId4zupx-0F30MlKA1USXPL_q2Q/viewform?usp=pp_url&entry.1652509489=';
   const REVOKE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfo0YAKboBErnBh1CADLAtIgyKL4NqjVURDQTbmxBGDUODBvQ/viewform?usp=pp_url&entry.507598123=';
 
   let storeData = { Active: [], Inactive: [] };
 
-  // ==========================================
-  // UTILITY FUNCTIONS
-  // ==========================================
-  function formatDate(dateStr) { 
-    if(!dateStr) return '—'; 
-    const d = new Date(dateStr); 
-    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); 
-  }
-  
-  function showToast(msg, type='success') { 
-    const c=document.getElementById('toastContainer'); 
-    const t=document.createElement('div'); 
-    t.className=`toast toast-${type}`; 
-    t.innerHTML=`<i class="fas ${type==='success'?'fa-check-circle':'fa-info-circle'}"></i> ${msg}`; 
-    c.appendChild(t); 
-    setTimeout(()=>{t.style.animation='toastOut 0.3s ease forwards';setTimeout(()=>t.remove(),300);},3500); 
-  }
+  function formatDate(dateStr) { if(!dateStr) return '—'; const d = new Date(dateStr); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  function showToast(msg, type='success') { const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerHTML=`<i class="fas ${type==='success'?'fa-check-circle':'fa-info-circle'}"></i> ${msg}`; c.appendChild(t); setTimeout(()=>{t.style.animation='toastOut 0.3s ease forwards';setTimeout(()=>t.remove(),300);},3500); }
 
-  // ==========================================
-  // DATA FETCHING (API)
-  // ==========================================
   async function fetchData() {
     document.getElementById('syncStatus').innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Syncing...</span>';
     document.getElementById('syncStatus').className = 'save-indicator';
@@ -155,20 +134,13 @@
       if (data.Active && data.Inactive) {
         const prevData = JSON.stringify(storeData);
         storeData = data;
-        // Only re-render if data actually changed to save resources
         if (JSON.stringify(storeData) !== prevData) renderUI();
       }
-    } catch (e) { 
-      console.error('Fetch error:', e); 
-      showToast('Connection failed. Check console.', 'info');
-    }
+    } catch (e) { console.error('Fetch error:', e); showToast('Connection failed', 'info'); }
     document.getElementById('syncStatus').innerHTML = '<i class="fas fa-check-circle"></i> <span>Synced</span>';
     document.getElementById('syncStatus').className = 'save-indicator synced';
   }
 
-  // ==========================================
-  // UI RENDERING
-  // ==========================================
   function renderUI() {
     const activeEl = document.getElementById('activeQueue');
     const inactiveEl = document.getElementById('inactiveQueue');
@@ -177,7 +149,7 @@
     document.getElementById('inactiveCount').textContent = storeData.Inactive.length;
 
     if (!storeData.Active.length) {
-      activeEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-check-double" style="font-size:24px;display:block;margin-bottom:10px;color:var(--success);"></i>All active setups completed</div>';
+      activeEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-check-double" style="font-size:24px;display:block;margin-bottom:10px;color:var(--success);"></i>All setups completed</div>';
     } else {
       activeEl.innerHTML = storeData.Active.map(emp => createCard(emp, 'active')).join('');
     }
@@ -189,6 +161,19 @@
     }
   }
 
+  function createRequirementItem(label, value, isRevoke) {
+    const isRequired = (value === 'Required' || value === 'Yes' || value === true || value === 1);
+    const icon = isRequired ? (isRevoke ? 'fa-circle-xmark' : 'fa-circle-exclamation') : 'fa-circle-check';
+    const cssClass = isRequired ? (isRevoke ? 'req-item required-revoke' : 'req-item required') : 'req-item not-required';
+    const statusText = isRequired ? (isRevoke ? 'MUST REVOKE' : 'REQUIRED') : 'NOT REQUIRED';
+
+    return `<div class="${cssClass}">
+              <i class="fas ${icon}" style="font-size:14px;"></i>
+              <span>${label}</span>
+              <span style="margin-left:auto;font-size:11px;letter-spacing:0.5px;">${statusText}</span>
+            </div>`;
+  }
+
   function createCard(emp, type) {
     const isInactive = type === 'inactive';
     const borderColor = isInactive ? 'var(--danger)' : 'var(--teal)';
@@ -197,35 +182,68 @@
     const btnIcon = isInactive ? 'fa-user-slash' : 'fa-user-check';
     const btnText = isInactive ? 'Revoke Credentials' : 'Complete Setup';
     
-    // GENERATE PREFILLED LINK ON THE FLY based on Employee ID
     const empId = emp['Employee ID'] || '';
     const formBaseUrl = isInactive ? REVOKE_FORM_URL : SETUP_FORM_URL;
     const formLink = formBaseUrl + encodeURIComponent(empId);
 
+    // Requirement Fields
+    const emailReq = emp['Office Email'] || '';
+    const dashReq = emp['Dashboard Integration'] || '';
+    const bioReq = emp['Biometric Enrollment'] || '';
+    
+    // Relieving Date (Only applies to Inactive)
+    const relievingDate = isInactive ? emp['Date of Relieving'] : '';
+
+    let checklistHTML = '';
+    if (emailReq || dashReq || bioReq) {
+      checklistHTML = `
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:10px;font-weight:700;color:${isInactive ? 'var(--danger)' : 'var(--warning)'};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">
+            ${isInactive ? 'What to Revoke' : 'What to Setup'}
+          </div>
+          ${createRequirementItem('Office Email', emailReq, isInactive)}
+          ${createRequirementItem('Dashboard Integration', dashReq, isInactive)}
+          ${createRequirementItem('Biometric Enrollment', bioReq, isInactive)}
+        </div>
+      `;
+    }
+
+    // Relieving Info (For Inactive cards)
+    let relievingHTML = '';
+    if (isInactive && relievingDate) {
+      relievingHTML = `
+        <div style="margin-top:10px;background:var(--danger-dim);border:1px solid rgba(248,81,73,0.2);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--danger);display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-calendar-xmark"></i>
+          <span>Relieved on: <strong>${formatDate(relievingDate)}</strong></span>
+        </div>
+      `;
+    }
+
     return `
       <div class="card" style="${borderStyle}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
           <div>
             <h3 style="font-size:15px;font-weight:700;">${emp['Employee Name']}</h3>
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${emp['Designation']}</div>
           </div>
           <code style="background:var(--bg);padding:3px 8px;border-radius:4px;font-size:11px;">${empId}</code>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+        <div style="display:flex;gap:14px;font-size:12px;color:var(--text-muted);margin-bottom:2px;">
           <div><i class="fas fa-building" style="margin-right:4px;color:var(--accent);"></i>${emp['Business Unit']}</div>
           <div><i class="fas fa-calendar" style="margin-right:4px;"></i>DOJ: ${formatDate(emp['Date of Joining'])}</div>
           <div><i class="fas fa-briefcase" style="margin-right:4px;"></i>${emp['Joining Type']}</div>
         </div>
-        <a href="${formLink}" target="_blank" class="btn ${btnClass}" style="width:100%;justify-content:center;text-decoration:none;">
+        
+        ${relievingHTML}
+        ${checklistHTML}
+
+        <a href="${formLink}" target="_blank" class="btn ${btnClass}" style="width:100%;justify-content:center;text-decoration:none;margin-top:16px;">
           <i class="fas ${btnIcon}"></i> ${btnText}
         </a>
       </div>
     `;
   }
 
-  // ==========================================
-  // INITIALIZATION & POLLING
-  // ==========================================
   fetchData();
   setInterval(fetchData, POLL_INTERVAL);
 </script>
